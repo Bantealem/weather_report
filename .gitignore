@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Data (prepare_data.py creates it again)
+data/raw/*
+data/processed/*
+
+# Editor and system files
+.vscode/
+.idea/
+.ipynb_checkpoints/
+.DS_Store
