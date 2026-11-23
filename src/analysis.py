@@ -1,48 +1,59 @@
-"""Statistics: trends, anomalies and extreme days (numpy and scipy)."""
+"""Calculations: averages, anomalies, extreme days and correlation (numpy)."""
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from src.cleaning import yearly_table
 
-# years used as "normal climate" when we calculate anomalies
+# the old period and the recent period that we compare
 BASELINE_START = 1961
 BASELINE_END = 1990
+RECENT_START = 1996
+RECENT_END = 2025
+
+# limits for the extreme days
+HOT_DAY_LIMIT = 30      # maximum temperature in °C
+HEAVY_RAIN_LIMIT = 20   # rain in mm
+
+MOVING_WINDOW = 10      # years used for the moving average
 
 
-def linear_trend(years, values):
-    """Fit a straight line through the points (year, value).
-
-    Parameters:
-        years (Series): the years (x values)
-        values (Series): the measured values (y values)
-
-    Returns:
-        dict: slope (change per year), intercept, p_value and r_squared
-    """
-    result = stats.linregress(years, values)
-
-    return {
-        "slope": result.slope,
-        "intercept": result.intercept,
-        "p_value": result.pvalue,
-        "r_squared": result.rvalue ** 2,
-    }
-
-
-def trend_line(years, trend):
-    """Calculate the y values of the trend line, so we can draw it.
+def period_average(table, column, start, end):
+    """Calculate the average of a column between two years.
 
     Parameters:
-        years (Series): the years (x values)
-        trend (dict): result of linear_trend
+        table (DataFrame): a table with a "year" column
+        column (str): the column we want to average
+        start (int): first year (included)
+        end (int): last year (included)
 
     Returns:
-        array: one y value for each year
+        float: the average
     """
-    years = np.array(years)
-    return trend["intercept"] + trend["slope"] * years
+    years = table["year"]
+    selected = table.loc[(years >= start) & (years <= end), column]
+    return np.mean(selected)
+
+
+def moving_average(values, window=MOVING_WINDOW):
+    """Smooth a series with a moving average.
+
+    Each value becomes the average of itself and the (window - 1)
+    values before it. The first years do not have enough values,
+    so they get NaN and are not drawn in the chart.
+
+    Parameters:
+        values (Series): the numbers to smooth
+        window (int): how many values go in each average
+
+    Returns:
+        array: same length as values
+    """
+    values = np.array(values)
+    weights = np.ones(window) / window
+    averages = np.convolve(values, weights, mode="valid")
+    empty = np.full(window - 1, np.nan)
+    return np.concatenate([empty, averages])
 
 
 def temperature_anomalies(yearly):
@@ -54,9 +65,8 @@ def temperature_anomalies(yearly):
     Returns:
         tuple: (DataFrame with year and anomaly, baseline temperature)
     """
-    years = yearly["year"]
-    in_baseline = (years >= BASELINE_START) & (years <= BASELINE_END)
-    baseline = yearly.loc[in_baseline, "temp_mean"].mean()
+    baseline = period_average(yearly, "temp_mean",
+                              BASELINE_START, BASELINE_END)
 
     anomalies = yearly[["year"]].copy()
     anomalies["anomaly"] = yearly["temp_mean"] - baseline
@@ -64,36 +74,29 @@ def temperature_anomalies(yearly):
     return anomalies, baseline
 
 
-def count_days(df, column, threshold):
-    """Count the days per year when a value is at least the threshold.
+def count_days(df, column, limit):
+    """Count the days per year when a value is at least the limit.
 
     Parameters:
         df (DataFrame): prepared daily data of one city
         column (str): column to check, e.g. "temperature_2m_max"
-        threshold (float): limit, e.g. 30 for hot days
+        limit (float): the limit, e.g. 30 for hot days
 
     Returns:
         DataFrame: columns year and days
     """
-    extreme = df[df[column] >= threshold]
+    extreme = df[df[column] >= limit]
     counts = extreme.groupby("year").size()
 
     # years without any extreme day are missing, so we add them with 0
     all_years = sorted(df["year"].unique())
     counts = counts.reindex(all_years, fill_value=0)
 
-    return counts.rename_axis("year").reset_index(name="days")
+    return pd.DataFrame({"year": all_years, "days": counts.values})
 
 
-def format_p_value(p_value):
-    """Write a p-value as text, very small values as '< 0.001'."""
-    if p_value < 0.001:
-        return "< 0.001"
-    return f"{p_value:.3f}"
-
-
-def warming_summary(data_by_city):
-    """Make a table with the warming trend of every city.
+def temperature_change_table(data_by_city):
+    """Compare the average temperature of the old and the recent period.
 
     Parameters:
         data_by_city (dict): city name -> prepared daily data
@@ -101,19 +104,42 @@ def warming_summary(data_by_city):
     Returns:
         DataFrame: one row per city
     """
+    old_name = f"Average {BASELINE_START}-{BASELINE_END} (°C)"
+    new_name = f"Average {RECENT_START}-{RECENT_END} (°C)"
     rows = []
 
     for city, df in data_by_city.items():
         yearly = yearly_table(df)
-        trend = linear_trend(yearly["year"], yearly["temp_mean"])
-        number_of_years = yearly["year"].max() - yearly["year"].min()
+        old = period_average(yearly, "temp_mean",
+                             BASELINE_START, BASELINE_END)
+        new = period_average(yearly, "temp_mean",
+                             RECENT_START, RECENT_END)
 
         rows.append({
             "City": city,
-            "Warming per decade (°C)": round(trend["slope"] * 10, 2),
-            "Total warming (°C)": round(trend["slope"] * number_of_years, 2),
-            "p-value": format_p_value(trend["p_value"]),
-            "R²": round(trend["r_squared"], 2),
+            old_name: round(old, 2),
+            new_name: round(new, 2),
+            "Change (°C)": round(new - old, 2),
         })
 
     return pd.DataFrame(rows)
+
+
+def city_correlation(data_by_city):
+    """Check if the cities warm and cool in the same years.
+
+    Parameters:
+        data_by_city (dict): city name -> prepared daily data
+
+    Returns:
+        DataFrame: correlation between the annual temperatures of the cities
+    """
+    names = list(data_by_city.keys())
+    temperatures = []
+
+    for city in names:
+        yearly = yearly_table(data_by_city[city])
+        temperatures.append(yearly["temp_mean"])
+
+    correlation = np.corrcoef(temperatures)
+    return pd.DataFrame(correlation, index=names, columns=names).round(2)
