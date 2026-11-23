@@ -1,0 +1,4 @@
+City,Warming per decade (°C),Total warming (°C),p-value,R²
+Milan,0.37,3.14,< 0.001,0.74
+Rome,0.23,1.99,< 0.001,0.51
+Palermo,0.27,2.27,< 0.001,0.66
