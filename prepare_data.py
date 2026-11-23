@@ -13,7 +13,7 @@ It does four things for every city:
 
 from pathlib import Path
 
-from src.analysis import warming_summary
+from src.analysis import temperature_change_table
 from src.cleaning import check_data, prepare_city
 from src.data_loader import load_city
 
@@ -45,11 +45,11 @@ def main():
         df.to_csv(PROCESSED_DIR / f"{city.lower()}_processed.csv", index=False)
         data_by_city[city] = df
 
-    # save a small summary table with the warming trend of each city
-    summary = warming_summary(data_by_city)
-    summary.to_csv(OUTPUT_DIR / "warming_summary.csv", index=False)
+    # save a small table that compares the old and the recent period
+    summary = temperature_change_table(data_by_city)
+    summary.to_csv(OUTPUT_DIR / "temperature_change.csv", index=False)
 
-    print("\nWarming trend (annual mean temperature):")
+    print("\nAverage temperature, old period and recent period:")
     print(summary.to_string(index=False))
 
 
