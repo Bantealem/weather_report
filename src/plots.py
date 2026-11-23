@@ -4,21 +4,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from src.analysis import trend_line
+from src.analysis import moving_average
 from src.cleaning import SEASON_ORDER
 
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def plot_trend(yearly, trend, city):
-    """Annual mean temperature of one city, with its trend line."""
+def plot_temperature(yearly, city):
+    """Annual mean temperature of one city, with a 10-year moving average."""
     fig, ax = plt.subplots(figsize=(10, 5))
 
     ax.plot(yearly["year"], yearly["temp_mean"], marker="o", markersize=3,
             label="Annual mean")
-    ax.plot(yearly["year"], trend_line(yearly["year"], trend), color="red",
-            linestyle="--", label="Trend line")
+    ax.plot(yearly["year"], moving_average(yearly["temp_mean"]),
+            color="red", linewidth=2.5, label="10-year moving average")
 
     ax.set_title(f"Annual mean temperature in {city}")
     ax.set_xlabel("Year")
@@ -114,13 +114,13 @@ def plot_annual_compare(yearly_by_city, column, ylabel, title):
     return fig
 
 
-def plot_extreme_days(counts, trend, ylabel, title):
-    """Bars with the number of extreme days per year, plus a trend line."""
+def plot_extreme_days(counts, ylabel, title):
+    """Bars with the number of extreme days per year, plus a moving average."""
     fig, ax = plt.subplots(figsize=(10, 5))
 
     ax.bar(counts["year"], counts["days"], label="Days per year")
-    ax.plot(counts["year"], trend_line(counts["year"], trend), color="red",
-            linestyle="--", label="Trend line")
+    ax.plot(counts["year"], moving_average(counts["days"]), color="red",
+            linewidth=2.5, label="10-year moving average")
 
     ax.set_title(title)
     ax.set_xlabel("Year")
